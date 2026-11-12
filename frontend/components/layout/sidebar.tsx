@@ -104,9 +104,9 @@ export function Sidebar({
   // const visibleItems = navigationItems.filter((item) =>
   //   item.roles.includes(role),
   // );
-console.log("[SIDEBAR DEBUG]", {
+console.log("[SIDEBAR DEBUG V2 - NEW DEV SERVER]", {
   role,
-  companiesItem: navigationItems.find(
+  companiesExists: navigationItems.some(
     (item) => item.labelKey === "companies",
   ),
   visibleItems: navigationItems
