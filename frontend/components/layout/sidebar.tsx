@@ -29,6 +29,12 @@ const navigationItems: NavigationItem[] = [
     roles: ["MANAGER", "ACCOUNTANT", "SALES"],
   },
   {
+  labelKey: "companies",
+  href: "/dashboard/companies",
+  icon: "▣",
+  roles: ["MANAGER", "ACCOUNTANT", "SALES"],
+},
+  {
     labelKey: "units",
     href: "/dashboard/units",
     icon: "▦",
@@ -95,10 +101,22 @@ export function Sidebar({
 
   const isRtl = direction === "rtl";
 
-  const visibleItems = navigationItems.filter((item) =>
-    item.roles.includes(role),
-  );
+  // const visibleItems = navigationItems.filter((item) =>
+  //   item.roles.includes(role),
+  // );
+console.log("[SIDEBAR DEBUG]", {
+  role,
+  companiesItem: navigationItems.find(
+    (item) => item.labelKey === "companies",
+  ),
+  visibleItems: navigationItems
+    .filter((item) => item.roles.includes(role))
+    .map((item) => item.labelKey),
+});
 
+const visibleItems = navigationItems.filter((item) =>
+  item.roles.includes(role),
+);
   return (
     <>
       {mobileOpen && (
