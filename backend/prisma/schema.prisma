@@ -1,0 +1,267 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  MANAGER
+  ACCOUNTANT
+  SALES
+}
+
+enum UnitStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+}
+
+enum ReservationStatus {
+  ACTIVE
+  EXPIRED
+  CONVERTED
+}
+
+enum ContractStatus {
+  DRAFT
+  APPROVED
+}
+
+enum InstallmentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  PARTIALLY_PAID
+}
+
+model Company {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  sessions     Session[]
+  units        Unit[]
+  clients      Client[]
+  reservations Reservation[]
+  contracts    Contract[]
+  installments Installment[]
+  payments     Payment[]
+  allocations  PaymentAllocation[]
+  auditLogs    AuditLog[]
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  companyId    String   @db.Uuid
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company           Company       @relation(fields: [companyId], references: [id])
+  sessions          Session[]
+  clients           Client[]      @relation("ClientSalesRep")
+  reservations      Reservation[] @relation("ReservationSalesRep")
+  approvedContracts Contract[]    @relation("ContractApprover")
+  payments          Payment[]     @relation("PaymentRecorder")
+  auditLogs         AuditLog[]
+
+  @@unique([id, companyId])
+  @@index([companyId, role])
+}
+
+model Session {
+  id        String    @id @default(uuid()) @db.Uuid
+  companyId String    @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId, companyId], references: [id, companyId])
+
+  @@index([userId, companyId])
+  @@index([expiresAt])
+}
+
+model Unit {
+  id          String     @id @default(uuid()) @db.Uuid
+  companyId   String     @db.Uuid
+  projectName String
+  unitNumber  String
+  type        String
+  area        Decimal    @db.Decimal(10, 2)
+  rooms       Int
+  price       Decimal    @db.Decimal(14, 2)
+  status      UnitStatus @default(AVAILABLE)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  company      Company       @relation(fields: [companyId], references: [id])
+  reservations Reservation[]
+
+  @@unique([companyId, projectName, unitNumber])
+  @@unique([id, companyId])
+  @@index([companyId, status, price])
+  @@index([companyId, area])
+}
+
+model Client {
+  id         String   @id @default(uuid()) @db.Uuid
+  companyId  String   @db.Uuid
+  salesRepId String   @db.Uuid
+  name       String
+  phone      String
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company      Company       @relation(fields: [companyId], references: [id])
+  salesRep     User          @relation("ClientSalesRep", fields: [salesRepId, companyId], references: [id, companyId])
+  reservations Reservation[]
+
+  @@unique([id, companyId])
+  @@index([companyId, salesRepId])
+  @@index([companyId, phone])
+}
+
+model Reservation {
+  id         String            @id @default(uuid()) @db.Uuid
+  companyId  String            @db.Uuid
+  unitId     String            @db.Uuid
+  clientId   String            @db.Uuid
+  salesRepId String            @db.Uuid
+  status     ReservationStatus @default(ACTIVE)
+  expiresAt  DateTime
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id])
+  unit     Unit      @relation(fields: [unitId, companyId], references: [id, companyId])
+  client   Client    @relation(fields: [clientId, companyId], references: [id, companyId])
+  salesRep User      @relation("ReservationSalesRep", fields: [salesRepId, companyId], references: [id, companyId])
+  contract Contract?
+
+  @@unique([id, companyId])
+  @@index([companyId, status, expiresAt])
+  @@index([unitId, companyId])
+}
+
+model Contract {
+  id                String         @id @default(uuid()) @db.Uuid
+  companyId         String         @db.Uuid
+  reservationId     String         @db.Uuid
+  status            ContractStatus @default(DRAFT)
+  unitPrice         Decimal        @db.Decimal(14, 2)
+  finalPrice        Decimal        @db.Decimal(14, 2)
+  downPayment       Decimal        @db.Decimal(14, 2)
+  installmentsCount Int
+  startDate         DateTime       @db.Date
+  approvedById      String?        @db.Uuid
+  approvedAt        DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  company      Company       @relation(fields: [companyId], references: [id])
+  reservation  Reservation   @relation(fields: [reservationId, companyId], references: [id, companyId])
+  approver     User?         @relation("ContractApprover", fields: [approvedById, companyId], references: [id, companyId])
+  installments Installment[]
+
+  @@unique([reservationId, companyId])
+  @@unique([id, companyId])
+  @@index([companyId, status])
+}
+
+model Installment {
+  id         String            @id @default(uuid()) @db.Uuid
+  companyId  String            @db.Uuid
+  contractId String            @db.Uuid
+  sequence   Int
+  amount     Decimal           @db.Decimal(14, 2)
+  paidAmount Decimal           @default(0) @db.Decimal(14, 2)
+  dueDate    DateTime          @db.Date
+  status     InstallmentStatus @default(PENDING)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  company     Company             @relation(fields: [companyId], references: [id])
+  contract    Contract            @relation(fields: [contractId, companyId], references: [id, companyId])
+  allocations PaymentAllocation[]
+
+  @@unique([contractId, sequence])
+  @@unique([id, companyId])
+  @@index([companyId, dueDate, status])
+}
+
+model Payment {
+  id             String   @id @default(uuid()) @db.Uuid
+  companyId      String   @db.Uuid
+  recordedById   String   @db.Uuid
+  idempotencyKey String
+  amount         Decimal  @db.Decimal(14, 2)
+  createdAt      DateTime @default(now())
+
+  company     Company             @relation(fields: [companyId], references: [id])
+  recordedBy  User                @relation("PaymentRecorder", fields: [recordedById, companyId], references: [id, companyId])
+  allocations PaymentAllocation[]
+
+  @@unique([companyId, idempotencyKey])
+  @@unique([id, companyId])
+  @@index([companyId, createdAt])
+}
+
+model PaymentAllocation {
+  id            String   @id @default(uuid()) @db.Uuid
+  companyId     String   @db.Uuid
+  paymentId     String   @db.Uuid
+  installmentId String   @db.Uuid
+  amount        Decimal  @db.Decimal(14, 2)
+  createdAt     DateTime @default(now())
+
+  company     Company     @relation(fields: [companyId], references: [id])
+  payment     Payment     @relation(fields: [paymentId, companyId], references: [id, companyId])
+  installment Installment @relation(fields: [installmentId, companyId], references: [id, companyId])
+
+  @@unique([paymentId, installmentId])
+  @@index([companyId, installmentId])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  companyId  String   @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  actor   User?   @relation(fields: [actorId, companyId], references: [id, companyId])
+
+  @@index([companyId, createdAt])
+  @@index([companyId, entityType, entityId])
+}
+
+model LoginAttempt {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String
+  ipAddress String?
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([createdAt])
+}
